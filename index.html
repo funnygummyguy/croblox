@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Mini Roblox (Three.js – Third Person R6)</title>
+
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js"
+    }
+  }
+  </script>
+
+  <style>
+    body { margin: 0; overflow: hidden; background: #87ceeb; font-family: 'Comic Sans MS', cursive, sans-serif; }
+    #loginUI, #homeUI, #gameUI { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: rgba(0,0,0,0.85); padding: 30px; border-radius: 20px; color: white; text-align: center; box-shadow: 0 0 20px rgba(0,0,0,0.5); }
+    #homeUI, #gameUI { display: none; }
+    input { display: block; margin: 10px auto; padding: 10px; border-radius: 10px; border: none; font-size: 16px; text-align: center; }
+    button { padding: 10px 20px; margin: 10px; border-radius: 10px; border: none; font-size: 16px; cursor: pointer; background: linear-gradient(45deg, #ff6a00, #ee0979); color: white; transition: transform 0.2s; }
+    button:hover { transform: scale(1.1); }
+    h2 { color: #ffeb3b; text-shadow: 2px 2px #000; }
+    #gamesList button { background: linear-gradient(45deg, #00f, #0ff); }
+    #chatBox { position: absolute; bottom: 10px; left: 10px; color: white; font-size: 18px; }
+    #buxDisplay { position: absolute; top: 10px; right: 10px; color: yellow; font-size: 20px; text-shadow: 1px 1px black; }
+    #accessoryUI { position: absolute; bottom: 50px; left: 50%; transform: translateX(-50%); display: flex; gap: 20px; }
+    .accessory { width: 50px; height: 50px; border: 2px solid white; display: flex; align-items: center; justify-content: center; cursor: pointer; background: rgba(0,0,0,0.5); flex-direction: column; }
+    .price { font-size: 12px; color: yellow; }
+  </style>
+</head>
+<body>
+
+<div id="loginUI">
+  <h2>Login / Register</h2>
+  <input id="username" placeholder="Username" />
+  <input id="password" type="password" placeholder="Password" />
+  <button id="loginBtn">Login / Register</button>
+</div>
+
+<div id="homeUI">
+  <h2>Homepage</h2>
+  <button id="gamesTab">Games</button>
+  <button id="accessoriesTab">Accessories</button>
+  <div id="gamesList" style="margin-top:20px;"></div>
+</div>
+
+<div id="gameUI">
+  <div id="ui">WASD Move • Space Jump • Scroll Zoom • Arrow Keys Rotate Camera</div>
+  <div id="chatBox"></div>
+  <div id="buxDisplay"></div>
+  <div id="accessoryUI"></div>
+  <canvas id="gameCanvas"></canvas>
+</div>
+
+<script type="module">
+import * as THREE from 'three';
+
+let usersDB = {};
+let currentUser = null;
+
+const loginUI = document.getElementById('loginUI');
+const homeUI = document.getElementById('homeUI');
+const gameUI = document.getElementById('gameUI');
+const gamesList = document.getElementById('gamesList');
+const chatBox = document.getElementById('chatBox');
+const buxDisplay = document.getElementById('buxDisplay');
+const accessoryUI = document.getElementById('accessoryUI');
+
+const usernameInput = document.getElementById('username');
+const passwordInput = document.getElementById('password');
+const loginBtn = document.getElementById('loginBtn');
+
+loginBtn.addEventListener('click', () => {
+  const u = usernameInput.value.trim();
+  const p = passwordInput.value.trim();
+  if (!u || !p) return alert('Enter username and password');
+
+  if (usersDB[u] && usersDB[u].password === p) {
+    currentUser = usersDB[u];
+    alert('Logged in as ' + u);
+  } else if (!usersDB[u]) {
+    usersDB[u] = { username: u, password: p, accessories: [], gamesData: {}, bux: 50 };
+    currentUser = usersDB[u];
+    alert('Registered and logged in as ' + u);
+  } else {
+    return alert('Wrong password');
+  }
+
+  loginUI.style.display = 'none';
+  homeUI.style.display = 'block';
+  gamesList.innerHTML = '';
+  buxDisplay.innerText = `Bux: ${currentUser.bux}`;
+});
+
+function showGamesTab() {
+  gamesList.innerHTML = '<button id="playObby">Play Obby</button><button id="playSword">Sword Fight</button>';
+  document.getElementById('playObby').addEventListener('click', () => { homeUI.style.display = 'none'; startObby(); });
+  document.getElementById('playSword').addEventListener('click', () => { homeUI.style.display = 'none'; startObby(); });
+}
+
+document.getElementById('gamesTab').addEventListener('click', () => {
+  accessoryUI.style.display = 'none';
+  showGamesTab();
+});
+
+document.getElementById('accessoriesTab').addEventListener('click', () => {
+  gamesList.innerHTML = '';
+  accessoryUI.style.display = 'flex';
+  accessoryUI.innerHTML = '';
+  const accessories = [
+    { name: 'Red Shirt', cost: 5 },
+    { name: 'Tophat', cost: 15 },
+    { name: 'Happy Face', cost: 20 }
+  ];
+  accessories.forEach(acc => {
+    const div = document.createElement('div');
+    div.className = 'accessory';
+    div.innerHTML = `<div>${acc.name}</div><div class='price'>${acc.cost} bux</div>`;
+    div.addEventListener('click', () => {
+      if(currentUser.bux >= acc.cost && !currentUser.accessories.includes(acc.name)) {
+        currentUser.bux -= acc.cost;
+        currentUser.accessories.push(acc.name);
+        buxDisplay.innerText = `Bux: ${currentUser.bux}`;
+        alert(`${acc.name} purchased!`);
+      } else if(currentUser.accessories.includes(acc.name)) {
+        alert('Already owned');
+      } else {
+        alert('Not enough bux');
+      }
+    });
+    accessoryUI.appendChild(div);
+  });
+});
+
+function startObby(){
+  gameUI.style.display = 'block';
+  accessoryUI.style.display = 'none';
+
+  const scene = new THREE.Scene();
+  scene.background = new THREE.Color(0x87ceeb);
+
+  const camera = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 0.1, 1000);
+  let camDistance = 8;
+  let camYaw = 0, camPitch = 0;
+
+  const renderer = new THREE.WebGLRenderer({canvas: document.getElementById('gameCanvas')});
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  renderer.setPixelRatio(window.devicePixelRatio);
+
+  const light = new THREE.DirectionalLight(0xffffff,1);
+  light.position.set(5,10,7.5);
+  scene.add(light);
+
+  const ground = new THREE.Mesh(new THREE.BoxGeometry(50,1,50), new THREE.MeshStandardMaterial({color:0x228B22}));
+  ground.position.y = 0;
+  scene.add(ground);
+
+  // Roblox-style R6 player with simple walking animation
+  const player = new THREE.Group();
+  const torso = new THREE.Mesh(new THREE.BoxGeometry(1,1.5,0.5), new THREE.MeshStandardMaterial({color:0x0000ff}));
+  torso.position.y = 1.25;
+  const head = new THREE.Mesh(new THREE.BoxGeometry(1,1,1), new THREE.MeshStandardMaterial({color:0xffff00}));
+  head.position.y = 2.5;
+  const leftLeg = new THREE.Mesh(new THREE.BoxGeometry(0.5,1,0.5), new THREE.MeshStandardMaterial({color:0x0000ff}));
+  leftLeg.position.set(-0.25,0.5,0);
+  const rightLeg = new THREE.Mesh(new THREE.BoxGeometry(0.5,1,0.5), new THREE.MeshStandardMaterial({color:0x0000ff}));
+  rightLeg.position.set(0.25,0.5,0);
+  const leftArm = new THREE.Mesh(new THREE.BoxGeometry(0.5,1.5,0.5), new THREE.MeshStandardMaterial({color:0x0000ff}));
+  leftArm.position.set(-0.75,1.25,0);
+  const rightArm = new THREE.Mesh(new THREE.BoxGeometry(0.5,1.5,0.5), new THREE.MeshStandardMaterial({color:0x0000ff}));
+  rightArm.position.set(0.75,1.25,0);
+  player.add(torso, head, leftLeg, rightLeg, leftArm, rightArm);
+  player.position.y = 0.5;
+  scene.add(player);
+
+  // Username label
+  const canvasLabel = document.createElement('canvas');
+  const ctx = canvasLabel.getContext('2d');
+  ctx.font = '40px Arial';
+  ctx.fillStyle = 'white';
+  ctx.fillText(currentUser.username, 0, 40);
+  const labelTexture = new THREE.CanvasTexture(canvasLabel);
+  const labelMaterial = new THREE.SpriteMaterial({ map: labelTexture });
+  const labelSprite = new THREE.Sprite(labelMaterial);
+  labelSprite.scale.set(2,1,1);
+  labelSprite.position.set(0,3.5,0);
+  player.add(labelSprite);
+
+  let keys = {};
+  document.addEventListener('keydown', e => keys[e.code] = true);
+  document.addEventListener('keyup', e => keys[e.code] = false);
+
+  function update(dt) {
+    let speed = 5;
+    let moveX = 0, moveZ = 0;
+
+    // Player movement
+    if(keys['KeyW']) { moveX += Math.sin(player.rotation.y)*speed*dt; moveZ += Math.cos(player.rotation.y)*speed*dt; }
+    if(keys['KeyS']) { moveX -= Math.sin(player.rotation.y)*speed*dt; moveZ -= Math.cos(player.rotation.y)*speed*dt; }
+    if(keys['KeyA']) { player.rotation.y += dt*2; }
+    if(keys['KeyD']) { player.rotation.y -= dt*2; }
+    player.position.x += moveX;
+    player.position.z += moveZ;
+
+    // Simple walking animation
+    const legSwing = Math.sin(Date.now() * 0.01) * 0.5;
+    leftLeg.rotation.x = moveX || moveZ ? legSwing : 0;
+    rightLeg.rotation.x = moveX || moveZ ? -legSwing : 0;
+    leftArm.rotation.x = moveX || moveZ ? -legSwing : 0;
+    rightArm.rotation.x = moveX || moveZ ? legSwing : 0;
+
+    // Camera control with arrow keys
+    if(keys['ArrowLeft']) camYaw -= dt*1.5;
+    if(keys['ArrowRight']) camYaw += dt*1.5;
+    if(keys['ArrowUp']) camPitch = Math.min(camPitch+dt, Math.PI/4);
+    if(keys['ArrowDown']) camPitch = Math.max(camPitch-dt, -Math.PI/4);
+
+    const camOffset = new THREE.Vector3(camDistance*Math.sin(camYaw), camDistance*Math.sin(camPitch)+3, camDistance*Math.cos(camYaw));
+    camera.position.copy(player.position).add(camOffset);
+    camera.lookAt(player.position);
+  }
+
+  const clock = new THREE.Clock();
+  function animate(){
+    requestAnimationFrame(animate);
+    update(clock.getDelta());
+    renderer.render(scene,camera);
+  }
+  animate();
+}
+</script>
+</body>
+</html>
